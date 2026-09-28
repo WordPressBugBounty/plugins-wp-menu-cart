@@ -45,9 +45,10 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 		 * @return void
 		 */
 		public function main_settings(): void {
-			$option_group  = self::OPTION_NAME;
-			$option_name   = self::OPTION_NAME;
-			$option_values = get_option( $option_name, array() );
+			$option_group      = self::OPTION_NAME;
+			$option_name       = self::OPTION_NAME;
+			$option_values     = get_option( $option_name, array() );
+			$legacy_icon_style = WPO_Menu_Cart()->pro_older_than( '5.1.0' );
 
 			register_setting( $option_group, $option_name, $this->resolve_callback( 'validate' ) );
 
@@ -73,7 +74,9 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 				),
 				'menu_icon_style'     => array(
 					'title'    => '<span class="wpmenucart-section__icon" aria-hidden="true">' . $this->callbacks->get_svg( 'general.svg' ) . '</span> ' . __( 'Menu Icon Style', 'wp-menu-cart' ),
-					'callback' => $this->resolve_callback( 'section' ),
+					'callback' => function() use ( $option_values ) {
+						$this->callbacks->icon_style_section( $option_values );
+					},
 					'page'     => self::PAGE_ICON_STYLE,
 				),
 				'general_settings'    => array(
@@ -155,88 +158,87 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 					),
 					'show_if'  => WPO_Menu_Cart()->is_shop_active( array(), 'WooCommerce' ),
 				),
+				'icon_style_custom_enabled'  => array(
+					'section'  => 'icon_style_custom_toggle',
+					'page'     => self::PAGE_ICON_STYLE,
+					'title'    => '',
+					'callback' => $this->resolve_callback( 'custom_section_toggle_callback' ),
+					'args'     => array(
+						'option_name' => $option_name,
+						'id'          => 'icon_style_custom_enabled',
+					),
+				),
 				'icon_display'               => array(
-					'section'  => 'menu_icon_style',
+					'section'  => 'icon_style_custom',
 					'page'     => self::PAGE_ICON_STYLE,
 					'title'    => __( 'Display shopping cart icon', 'wp-menu-cart' ),
-					'callback' => $this->resolve_callback( 'checkbox' ),
+					'callback' => $this->resolve_callback( 'toggle_switch_callback' ),
 					'args'     => array(
-						'option_name' => $option_name,
-						'id'          => 'icon_display',
+						'option_name'    => $option_name,
+						'id'             => 'icon_display',
+						'description'    => __( 'Shows a graphical icon next to your cart totals in the menu.', 'wp-menu-cart' ),
+						'tooltip'        => __( 'The icon appears before your cart total in the menu. Turn it off to show text only.', 'wp-menu-cart' ),
+						'inline_toggle'  => true,
 					),
 				),
-				'cart_icon'                  => array(
-					'section'  => 'menu_icon_style',
-					'page'     => self::PAGE_ICON_STYLE,
-					'title'    => __( 'Choose a cart icon.', 'wp-menu-cart' ),
-					'callback' => $this->resolve_callback( 'icons_radio_element_callback' ),
-					'args'     => array(
-						'option_name' => $option_name,
-						'id'          => 'cart_icon',
-						'options'     => array(
-							'0'  => '0',
-							'1'  => '1',
-							'2'  => '2',
-							'3'  => '3',
-							'4'  => '4',
-							'5'  => '5',
-							'6'  => '6',
-							'7'  => '7',
-							'8'  => '8',
-							'9'  => '9',
-							'10' => '10',
-							'11' => '11',
-							'12' => '12',
-							'13' => '13',
+				'cart_icon' => $legacy_icon_style
+					? array(
+						'section'  => 'icon_style_custom',
+						'page'     => self::PAGE_ICON_STYLE,
+						'title'    => __( 'Choose a cart icon', 'wp-menu-cart' ),
+						// Called directly rather than through resolve_callback(): Pro's
+						// own pre-5.1.0 override of this method has an unclosed <i> tag
+						// that breaks the layout of every row after it, so this
+						// deliberately skips Pro's version rather than deferring to it.
+						'callback' => array( $this->callbacks, 'icons_radio_element_callback' ),
+						'args'     => array(
+							'option_name' => $option_name,
+							'id'          => 'cart_icon',
+							'options'     => range( 0, 13 ),
+						),
+					)
+					: array(
+						'section'  => 'icon_style_custom',
+						'page'     => self::PAGE_ICON_STYLE,
+						'title'    => __( 'Choose a cart icon', 'wp-menu-cart' ),
+						'callback' => $this->resolve_callback( 'select_with_locked_options' ),
+						'args'     => array(
+							'option_name'       => $option_name,
+							'id'                => 'cart_icon',
+							'options'           => array(
+								'0' => __( 'Default Cart (FontAwesome)', 'wp-menu-cart' ),
+								'1' => __( 'Shopping Bag', 'wp-menu-cart' ),
+								'2' => __( 'Woven Basket', 'wp-menu-cart' ),
+							),
+							'locked_options'    => array( '1', '2' ),
+							'description'       => __( 'Select from our library of standard e-commerce icons.', 'wp-menu-cart' ),
+							'custom_attributes' => array(
+								'data-show_for_option_name' => $option_name . '[icon_display]',
+								'data-keep_current_value'   => 'true',
+							),
 						),
 					),
-				),
-				'cart_icon_color'            => array(
-					'section'  => 'menu_icon_style',
-					'page'     => self::PAGE_ICON_STYLE,
-					'title'    => __( 'Override icon color', 'wp-menu-cart' ),
-					'callback' => $this->resolve_callback( 'checkbox' ),
-					'args'     => array(
-						'option_name' => $option_name,
-						'id'          => 'cart_icon_color',
-						'disabled'    => true,
-						'pro'         => true,
-					),
-				),
-				'custom_icon'                => array(
-					'section'  => 'menu_icon_style',
-					'page'     => self::PAGE_ICON_STYLE,
-					'title'    => __( 'Custom Icon', 'wp-menu-cart' ),
-					'callback' => $this->resolve_callback( 'media_upload_callback' ),
-					'args'     => array(
-						'option_name'          => $option_name,
-						'id'                   => 'custom_icon',
-						'uploader_button_text' => __( 'Set image', 'wp-menu-cart' ),
-						'uploader_title'       => __( 'Select or upload a custom menu cart icon.', 'wp-menu-cart' ),
-						'remove_button_text'   => __( 'Remove image', 'wp-menu-cart' ),
-						'description'          => __( 'Upload a custom menu cart icon here if you do not want to use one of the icons above. Make sure you resize the icon before uploading. Icon should usually be 15-30px tall.', 'wp-menu-cart' ),
-						'disabled'             => true,
-						'pro'                  => true,
-					),
-				),
 				'items_display'              => array(
-					'section'  => 'general_settings',
-					'page'     => self::PAGE_GENERAL,
-					'title'    => __( 'Contents of the menu cart item', 'wp-menu-cart' ),
-					'callback' => $this->resolve_callback( 'radio_button' ),
+					'section'  => 'icon_style_custom',
+					'page'     => self::PAGE_ICON_STYLE,
+					'title'    => __( 'Contents of the menu cart', 'wp-menu-cart' ),
+					'callback' => $this->resolve_callback( 'select_with_locked_options' ),
 					'args'     => array(
-						'option_name' => $option_name,
-						'id'          => 'items_display',
-						'options'     => array(
-							'1' => __( 'Items Only', 'wp-menu-cart' ),
-							'2' => __( 'Price Only', 'wp-menu-cart' ),
-							'3' => __( 'Both price and items', 'wp-menu-cart' ),
+						'option_name'    => $option_name,
+						'id'             => 'items_display',
+						'options'        => array(
+							'3'      => __( 'Items & Price (Default)', 'wp-menu-cart' ),
+							'1'      => __( 'Items Only', 'wp-menu-cart' ),
+							'2'      => __( 'Price Only', 'wp-menu-cart' ),
+							'custom' => __( 'Custom', 'wp-menu-cart' ),
 						),
+						'locked_options' => array( 'custom' ),
+						'description'    => __( 'Decide what data displays alongside the icon.', 'wp-menu-cart' ),
 					),
 				),
 				'total_price_type'           => array(
-					'section'  => 'general_settings',
-					'page'     => self::PAGE_GENERAL,
+					'section'  => 'icon_style_custom',
+					'page'     => self::PAGE_ICON_STYLE,
 					'title'    => __( 'Price to display', 'wp-menu-cart' ),
 					'callback' => $this->resolve_callback( 'select' ),
 					'args'     => array(
@@ -248,21 +250,9 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 							'checkout_total' => __( 'Checkout total (including discounts, fees & shipping)', 'wp-menu-cart' ),
 						),
 						'default'     => 'total',
+						'description' => __( 'Choose which calculation to show to the customer.', 'wp-menu-cart' ),
 					),
 					'show_if'  => class_exists( 'WooCommerce' ),
-				),
-				'custom_class'               => array(
-					'section'  => 'general_settings',
-					'page'     => self::PAGE_GENERAL,
-					'title'    => __( 'Enter a custom CSS class (optional)', 'wp-menu-cart' ),
-					'callback' => $this->resolve_callback( 'text_input' ),
-					'args'     => array(
-						'option_name' => $option_name,
-						'id'          => 'custom_class',
-						'disabled'    => true,
-						'pro'         => true,
-						'size'        => 30,
-					),
 				),
 				'wpml_string_translation'    => array(
 					'section'  => 'general_settings',
@@ -289,7 +279,30 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 				),
 			);
 
+			// Pro versions older than 5.1.0 don't register cart_icon_color and
+			// custom_icon themselves; they expect to find these here, locked,
+			// so their own wpo_wpmenucart_main_settings_fields hook (which runs
+			// as part of the apply_filters() call just below) can unlock them.
+			if ( WPO_Menu_Cart()->pro_older_than( '5.1.0' ) ) {
+				$fields = $this->array_insert_after( $fields, 'cart_icon', $this->legacy_pro_fields( $option_name ) );
+			}
+
 			$fields = apply_filters( 'wpo_wpmenucart_main_settings_fields', $fields, $option_name );
+
+			if ( $legacy_icon_style && isset( $fields['items_display']['args']['custom'] ) ) {
+				// Pro versions before 5.1.0 rewrite this field to render through
+				// select() instead of select_with_locked_options(). select()'s
+				// custom-content panel doesn't carry the class the conditional
+				// visibility script looks for, which leaves the panel stuck
+				// visible on load and hides the entire field, dropdown included,
+				// the moment a non-custom option is picked. Pro's own custom-content
+				// sub-callback is left as-is; only the wrapping callback needs fixing.
+				// Old Pro's own unlock loop only clears the 'pro'/'disabled' keys the
+				// card-style fields use, it has no concept of locked_options, so that
+				// stays locked unless cleared here too.
+				$fields['items_display']['callback']               = $this->resolve_callback( 'select_with_locked_options' );
+				$fields['items_display']['args']['locked_options'] = array();
+			}
 
 			foreach ( $fields as $field_id => $field ) {
 				// The fixed show_if logic: Show if 'show_if' isn't set, or if it evaluates to true.
@@ -304,6 +317,62 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 					);
 				}
 			}
+		}
+
+		/**
+		 * Field definitions for cart_icon_color and custom_icon, served only
+		 * to sites running a Pro version older than 5.1.0.
+		 *
+		 * @param  string $option_name
+		 * @return array
+		 */
+		protected function legacy_pro_fields( string $option_name ): array {
+			return array(
+				'cart_icon_color' => array(
+					'section'  => 'icon_style_custom',
+					'page'     => self::PAGE_ICON_STYLE,
+					'title'    => __( 'Override icon color', 'wp-menu-cart' ),
+					'callback' => $this->resolve_callback( 'optional_color_picker_element_callback' ),
+					'args'     => array(
+						'option_name' => $option_name,
+						'id'          => 'cart_icon_color',
+						'disabled'    => true,
+						'pro'         => true,
+					),
+				),
+				'custom_icon'     => array(
+					'section'  => 'icon_style_custom',
+					'page'     => self::PAGE_ICON_STYLE,
+					'title'    => __( 'Custom Icon', 'wp-menu-cart' ),
+					'callback' => $this->resolve_callback( 'media_upload_callback' ),
+					'args'     => array(
+						'option_name'          => $option_name,
+						'id'                   => 'custom_icon',
+						'uploader_button_text' => __( 'Set image', 'wp-menu-cart' ),
+						'uploader_title'       => __( 'Select or upload a custom menu cart icon.', 'wp-menu-cart' ),
+						'remove_button_text'   => __( 'Remove image', 'wp-menu-cart' ),
+						'description'          => __( 'Upload a custom menu cart icon here if you do not want to use one of the icons above. Make sure you resize the icon before uploading. Icon should usually be 15-30px tall.', 'wp-menu-cart' ),
+						'disabled'             => true,
+						'pro'                  => true,
+					),
+				),
+			);
+		}
+
+		/**
+		 * Insert elements into an associative array right after a given key.
+		 *
+		 * @param  array  $array The original array.
+		 * @param  string $key   The key to insert after. Appended at the end if not found.
+		 * @param  array  $new   The elements to insert.
+		 * @return array
+		 */
+		protected function array_insert_after( array $array, string $key, array $new ): array {
+			$keys  = array_keys( $array );
+			$index = array_search( $key, $keys, true );
+			$pos   = ( false === $index ) ? count( $array ) : $index + 1;
+
+			return array_merge( array_slice( $array, 0, $pos, true ), $new, array_slice( $array, $pos, null, true ) );
 		}
 
 		/**
@@ -548,7 +617,7 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 
 			if ( isset( $pages[ $current_subtab ] ) ) :
 				?>
-				<form method="post" action="options.php">
+				<form method="post" action="options.php" id="wpo-wpmenucart-settings">
 					<?php settings_fields( self::OPTION_NAME ); ?>
 					<input type="hidden" name="wpo_wpmenucart_settings_page" value="<?php echo esc_attr( $pages[ $current_subtab ] ); ?>" />
 					<?php
@@ -562,7 +631,7 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 			do_action( 'wpo_wpmenucart_cart_design_behavior_subtab_panels', $current_subtab );
 
 			if ( apply_filters( 'wpo_wpmenucart_show_upgrade_ad', true ) ) {
-				$this->render_pro_ad();
+				$this->render_pro_upsell_strip( $current_subtab );
 			}
 		}
 
@@ -629,62 +698,161 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 					) ),
 					'wpo_wpmenucart_nav_menu_notice_dismissed'
 				);
-
-				if ( apply_filters( 'wpo_wpmenucart_show_multiple_menus_notice', true ) ) : ?>
-					<div class="notice notice-info inline">
-						<p class="description"><?php echo wp_kses_post( sprintf(
-							/* translators: %s: Menu Cart Pro link */
-							__( 'Adding the cart to multiple menus is available in %s.', 'wp-menu-cart' ),
-							'<a href="https://wpovernight.com/downloads/menu-cart-pro?utm_source=wordpress&utm_medium=menucartfree&utm_campaign=menucartmultiplemenus" target="_blank" rel="noopener noreferrer">Menu Cart Pro</a>'
-						) ); ?></p>
-					</div>
-				<?php endif;
 			}
 		}
 
 		/**
-		 * Render the Pro upgrade ad shown at the bottom of the Main tab.
+		 * Render the Pro upsell strip for a given context.
 		 *
+		 * @param  string $context Arbitrary identifier for where this strip is rendered.
 		 * @return void
 		 */
-		protected function render_pro_ad(): void {
+		public function render_pro_upsell_strip( string $context ): void {
+			$content = apply_filters(
+				'wpo_wpmenucart_upsell_strip_content',
+				$this->get_default_upsell_strip_content( $context ),
+				$context
+			);
+
+			if ( ! $content ) {
+				return;
+			}
+
+			$meta_key = 'wpo_wpmenucart_upsell_strip_' . $context . '_dismissed';
+
+			if ( $this->maybe_handle_upsell_strip_dismiss( $meta_key ) ) {
+				return;
+			}
+
+			$this->render_upsell_strip( $content['title'], $content['features'], $content['campaign'], $content['content'], $meta_key );
+		}
+
+		/**
+		 * Check whether an upsell strip has been dismissed, handling the
+		 * dismiss link's request if present. Just scoped to a per-context
+		 * meta key instead of one fixed one.
+		 *
+		 * @param  string $meta_key User meta key used to persist the dismissal.
+		 * @return bool
+		 */
+		protected function maybe_handle_upsell_strip_dismiss( string $meta_key ): bool {
+			if ( get_user_meta( get_current_user_id(), $meta_key, true ) ) {
+				return true;
+			}
+
+			if ( isset( $_GET['wpo_wpmenucart_dismiss_notice'] ) && $meta_key === $_GET['wpo_wpmenucart_dismiss_notice'] ) {
+				$nonce_action = 'wpo_wpmenucart_dismiss_notice_' . $meta_key;
+
+				if ( wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ?? '' ) ), $nonce_action ) ) {
+					update_user_meta( get_current_user_id(), $meta_key, true );
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/**
+		 * Default Pro upsell strip content, keyed by context id.
+		 *
+		 * @param  string $context
+		 * @return array|null
+		 */
+		protected function get_default_upsell_strip_content( string $context ): ?array {
+			$strips = array(
+				'display_modes' => array(
+					'title'    => __( 'Let shoppers open their cart from anywhere', 'wp-menu-cart' ),
+					'campaign' => 'display-modes-tab',
+					'content'  => 'display-modes-upsell-cross',
+					'features' => array(
+						array(
+							'icons' => array( 'flyout-preview.svg' ),
+							'label' => __( 'Cart details flyout', 'wp-menu-cart' ),
+						),
+						array(
+							'icons' => array( 'floating-dropdown.svg' ),
+							'label' => __( 'Floating and dropdown menus', 'wp-menu-cart' ),
+						),
+						array(
+							'icons' => array( 'menu-item.svg' ),
+							'label' => __( 'Cart in every menu', 'wp-menu-cart' ),
+						),
+						array(
+							'icons' => array( 'place-anywhere.svg' ),
+							'label' => __( 'Place the cart anywhere', 'wp-menu-cart' ),
+						),
+					),
+				),
+				'icon_style'    => array(
+					'title'    => __( 'More ways to style your cart icon', 'wp-menu-cart' ),
+					'campaign' => 'icon-style-tab',
+					'content'  => 'icon-style-upsell-cross',
+					'features' => array(
+						array(
+							'icons' => array( 'icon-swatch-mall.svg' ),
+							'label' => __( '2 templates', 'wp-menu-cart' ),
+						),
+						array(
+							'icons' => array( 'palette.svg' ),
+							'label' => __( 'Set your own colour to match the theme', 'wp-menu-cart' ),
+						),
+						array(
+							'icons' => array( 'upload.svg' ),
+							'label' => __( 'Upload a custom icon image', 'wp-menu-cart' ),
+						),
+						array(
+							'icons' => array( 'flyout-preview.svg' ),
+							'label' => __( 'Custom item content', 'wp-menu-cart' ),
+						),
+					),
+				),
+			);
+
+			return $strips[ $context ] ?? null;
+		}
+
+		/**
+		 * Render the Pro upsell strip markup.
+		 *
+		 * @param  string $title    The strip's heading.
+		 * @param  array  $features Feature icon(s) + label pairs.
+		 * @param  string $campaign UTM campaign slug for the "See what's in Pro" link.
+		 * @param  string $content  UTM content slug for the "See what's in Pro" link.
+		 * @param  string $meta_key User meta key used to persist the dismissal.
+		 * @return void
+		 */
+		protected function render_upsell_strip( string $title, array $features, string $campaign, string $content, string $meta_key ): void {
+			$dismiss_url = wp_nonce_url(
+				add_query_arg( 'wpo_wpmenucart_dismiss_notice', $meta_key ),
+				'wpo_wpmenucart_dismiss_notice_' . $meta_key
+			);
 			?>
-			<div class="menucart-pro-ad menucart-pro-ad-small">
-				<?php esc_html_e( 'Want To Stand Out?', 'wp-menu-cart' ); ?> <a href="https://wpovernight.com/downloads/menu-cart-pro?utm_source=wordpress&utm_medium=menucartfree&utm_campaign=menucartgopro"><?php esc_html_e( 'Go Pro.', 'wp-menu-cart' ); ?></a>
-				<ul style="font-size: 12px;list-style-type:circle;margin-left: 20px">
-					<li><?php esc_html_e( 'Unlimited Menus', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Choice of 14 icons', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Packed with customization options', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Access to Shortcode', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Top Notch Support', 'wp-menu-cart' ); ?></li>
-				</ul>
-			</div>
-			<div class="menucart-pro-ad menucart-pro-ad-big">
-				<img src="<?php echo esc_url( WPO_Menu_Cart()->plugin_url() . '/assets/images/wpo-helper.png' ); ?>" class="wpo-helper">
-				<h2><?php esc_html_e( 'Sell In Style With Menu Cart Pro!', 'wp-menu-cart' ); ?></h2>
-				<br>
-				<?php esc_html_e( 'Go Pro with Menu Cart Pro. Includes all the great standard features found in this free version plus:', 'wp-menu-cart' ); ?>
-				<br>
-				<ul style="list-style-type:circle;margin-left: 40px">
-					<li><?php esc_html_e( 'A choice of over 10 cart icons', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'A fully featured cart details flyout', 'wp-menu-cart' ); ?></li>
-					<li><?php echo wp_kses_post( 'Ability to add cart + flyout to an <strong>unlimited</strong> amount of menus', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Adjust the content & URLs via the settings', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Enter custom styles and apply custom classes via the settings', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'WPML compatible', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Automatic updates on any great new features', 'wp-menu-cart' ); ?></li>
-					<li><?php esc_html_e( 'Put the cart anywhere with the [wpmenucart] shortcode', 'wp-menu-cart' ); ?></li>
-				</ul>
-				<?php
-				printf(
-					/* translators: 1,2: <a> tags */
-					esc_html__( 'Need to see more? %1$sClick here%2$s to check it out. Add a product to your cart and watch what happens!', 'wp-menu-cart' ),
-					'<a href="' . esc_url( 'https://wpovernight.com/downloads/menu-cart-pro?utm_source=wordpress&utm_medium=menucartfree&utm_campaign=menucartadmore' ) . '">',
-					'</a>'
-				);
-				?>
-				<br><br>
-				<a class="button button-primary" style="text-align: center;margin: 0px auto" href="https://wpovernight.com/downloads/menu-cart-pro?utm_source=wordpress&utm_medium=menucartfree&utm_campaign=menucartadbuy"><?php esc_html_e( 'Buy Now', 'wp-menu-cart' ); ?></a>
+			<div class="wpmenucart-upsell-strip">
+				<div class="wpmenucart-upsell-strip__header">
+					<span class="wpmenucart-upsell-strip__lock" aria-hidden="true">
+						<?php echo $this->callbacks->get_svg( 'lock.svg' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG loaded from plugin directory. ?>
+					</span>
+					<strong class="wpmenucart-upsell-strip__title"><?php echo esc_html( $title ); ?></strong>
+					<span class="wpmenucart-upsell-strip__badge"><?php esc_html_e( 'Pro', 'wp-menu-cart' ); ?></span>
+					<a href="<?php echo esc_url( $dismiss_url ); ?>" class="wpmenucart-upsell-strip__dismiss" aria-label="<?php esc_attr_e( 'Dismiss', 'wp-menu-cart' ); ?>">&times;</a>
+				</div>
+				<div class="wpmenucart-upsell-strip__features">
+					<?php foreach ( $features as $i => $feature ) : ?>
+						<?php if ( $i > 0 ) : ?><span class="wpmenucart-upsell-strip__divider" aria-hidden="true"></span><?php endif; ?>
+						<span class="wpmenucart-upsell-strip__feature">
+							<span class="wpmenucart-upsell-strip__feature-icons" aria-hidden="true">
+								<?php foreach ( $feature['icons'] as $icon ) : ?>
+									<?php echo $this->callbacks->get_svg( $icon ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG loaded from plugin directory. ?>
+								<?php endforeach; ?>
+							</span>
+							<?php echo esc_html( $feature['label'] ); ?>
+						</span>
+					<?php endforeach; ?>
+				</div>
+				<a class="wpmenucart-upsell-strip__link" href="<?php echo esc_url( 'https://wpovernight.com/downloads/menu-cart-pro?utm_medium=plugin&utm_source=menucart&utm_campaign=' . $campaign . '&utm_content=' . $content ); ?>" target="_blank" rel="noopener noreferrer">
+					<?php esc_html_e( "See what's in Pro", 'wp-menu-cart' ); ?>
+					<?php echo $this->callbacks->get_svg( 'open-in-new.svg' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG loaded from plugin directory. ?>
+				</a>
 			</div>
 			<?php
 		}
@@ -700,20 +868,20 @@ if ( ! class_exists( 'WpMenuCart_Settings' ) ) :
 			$first_active        = ! empty( $active_shop_plugins ) ? array_key_first( $active_shop_plugins ) : '';
 
 			$default = array(
-				'desktop_cart_mode'       => 'none',
-				'mobile_cart_mode'        => 'none',
-				'desktop_sidebar_width'   => 360,
-				'desktop_overlay_opacity' => 40,
-				'mobile_sidebar_width'    => 360,
-				'mobile_overlay_opacity'  => 40,
-				'always_display'          => '',
-				'icon_display'            => '1',
-				'items_display'           => '3',
-				'custom_class'            => '',
-				'cart_icon'               => '0',
-				'shop_plugin'             => $first_active,
-				'builtin_ajax'            => '',
-				'hide_theme_cart'         => 1,
+				'desktop_cart_mode'         => 'none',
+				'mobile_cart_mode'          => 'none',
+				'desktop_sidebar_width'     => 360,
+				'desktop_overlay_opacity'   => 40,
+				'mobile_sidebar_width'      => 360,
+				'mobile_overlay_opacity'    => 40,
+				'always_display'            => '',
+				'icon_display'              => '1',
+				'items_display'             => '3',
+				'cart_icon'                 => '0',
+				'shop_plugin'               => $first_active,
+				'builtin_ajax'              => '',
+				'hide_theme_cart'           => 1,
+				'icon_style_custom_enabled' => 1,
 			);
 
 			update_option( self::OPTION_NAME, $default );

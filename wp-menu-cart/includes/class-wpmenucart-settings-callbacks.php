@@ -12,50 +12,6 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 	class WpMenuCart_Settings_Callbacks extends WPO_Settings_Callbacks_2 {
 
 		/**
-		 * Checkbox with optional Pro overlay.
-		 *
-		 * @param  array $args
-		 *
-		 * @return void
-		 */
-		public function checkbox( array $args ): void {
-			$this->render_with_pro_overlay( 'checkbox', $args, 'menucartflyout' );
-		}
-
-		/**
-		 * Select with optional Pro overlay.
-		 *
-		 * @param  array $args
-		 *
-		 * @return void
-		 */
-		public function select( array $args ): void {
-			$this->render_with_pro_overlay( 'select', $args, 'menucartflyout' );
-		}
-
-		/**
-		 * Text input with optional Pro overlay.
-		 *
-		 * @param  array $args
-		 *
-		 * @return void
-		 */
-		public function text_input( array $args ): void {
-			$this->render_with_pro_overlay( 'text_input', $args, 'menucartcustomclass' );
-		}
-
-		/**
-		 * Radio with optional Pro overlay.
-		 *
-		 * @param  array $args
-		 *
-		 * @return void
-		 */
-		public function radio_button( array $args ): void {
-			$this->render_with_pro_overlay( 'radio_button', $args, 'menucartflyout' );
-		}
-
-		/**
 		 * Range slider input callback.
 		 *
 		 * @param  array $args Field arguments.
@@ -167,6 +123,22 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 			}
 
 			return 'none';
+		}
+
+		/**
+		 * Resolve a stored Icon Style template value to one that's actually renderable right now.
+		 *
+		 * @param  string $template The raw stored template value.
+		 * @return string
+		 */
+		protected function resolve_available_icon_style( string $template ): string {
+			foreach ( $this->get_icon_style_options() as $option ) {
+				if ( $option['value'] === $template ) {
+					return empty( $option['disabled'] ) ? $template : '';
+				}
+			}
+
+			return '';
 		}
 
 		/**
@@ -282,6 +254,191 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 		}
 
 		/**
+		 * Icon Style section callback.
+		 *
+		 * @param  array $option_values Saved option values.
+		 * @return void
+		 */
+		public function icon_style_section( array $option_values ): void {
+			$current_template = $this->resolve_available_icon_style( $option_values['icon_style_template'] ?? '' );
+			$custom_enabled   = ! empty( $option_values['icon_style_custom_enabled'] );
+
+			echo '<div class="wpmenucart-section wpmenucart-section--icon-style">';
+
+			do_action( 'wpo_wpmenucart_before_icon_style_cards' );
+
+			printf( '<div class="wpmenucart-mode-group" data-context="icon_style">' );
+
+			printf( '<h3 class="wpmenucart-mode-group__heading">%s</h3>', esc_html__( 'Templates', 'wp-menu-cart' ) );
+
+			printf(
+				'<div class="wpmenucart-mode-cards%s">',
+				$custom_enabled ? ' wpmenucart-mode-cards--disabled' : ''
+			);
+			foreach ( $this->get_icon_style_options() as $template ) {
+				$args = apply_filters(
+					'wpo_wpmenucart_render_icon_style_card_args',
+					array(
+						'mode'             => $template['value'],
+						'name'             => $template['name'],
+						'description'      => $template['description'],
+						'current_value'    => $current_template,
+						'option_key'       => 'icon_style_template',
+						'pro'              => $template['pro'] ?? false,
+						'disabled'         => $template['disabled'] ?? false,
+						'disabled_tooltip' => $template['disabled_tooltip'] ?? '',
+					),
+					$template
+				);
+
+				$this->render_mode_card( $args );
+			}
+			echo '</div>';
+
+			do_action( 'wpo_wpmenucart_after_icon_style_cards' );
+
+			do_action( 'wpo_wpmenucart_icon_style_subpanels' );
+
+			echo '</div>'; // .wpmenucart-mode-group
+
+			$notice_attributes = $this->normalize_custom_attributes( array(
+				'data-show_for_option_name' => WpMenuCart_Settings::OPTION_NAME . '[icon_style_custom_enabled]',
+			) );
+
+			printf(
+				'<p class="wpmenucart-icon-style-disabled-notice"%s %s>%s</p>',
+				$custom_enabled ? '' : ' style="display:none;"',
+				$notice_attributes,
+				esc_html__( 'Templates are disabled while Custom Section is enabled.', 'wp-menu-cart' )
+			);
+
+			$this->render_custom_section( $custom_enabled );
+
+			echo '</div>'; // .wpmenucart-section--icon-style
+		}
+
+		/**
+		 * Render the Custom section: fields called directly rather than
+		 * through do_settings_fields(), so the row layout can match the design.
+		 *
+		 * @param  bool $enabled Whether the Custom section is currently toggled on.
+		 * @return void
+		 */
+		protected function render_custom_section( bool $enabled ): void {
+			printf( '<div class="wpmenucart-custom-section-toggle-row">' );
+			echo '<span class="wpmenucart-custom-section-toggle-row__icon" aria-hidden="true">';
+			$this->render_svg( 'custom-icon-style.svg' );
+			echo '</span>';
+			printf( '<span class="wpmenucart-custom-section-toggle-row__label">%s</span>', esc_html__( 'Custom', 'wp-menu-cart' ) );
+
+			$this->render_registered_fields( 'icon_style_custom_toggle' );
+
+			echo '</div>';
+
+			printf(
+				'<div class="wpmenucart-subpanel wpmenucart-custom-section-fields%s">',
+				$enabled ? '' : ' wpmenucart-custom-section-fields--collapsed'
+			);
+
+			$this->render_registered_fields( 'icon_style_custom' );
+
+			echo '</div>';
+		}
+
+		/**
+		 * Render every field registered to a page/section through
+		 * add_settings_field(), using our own row markup instead of
+		 * do_settings_fields()'s fixed <tr><th><td> table markup. Fields
+		 * stay registered through the normal WP Settings API.
+		 *
+		 * @param  string $section Section id fields were registered under.
+		 * @return void
+		 */
+		protected function render_registered_fields( string $section ): void {
+			global $wp_settings_fields;
+
+			foreach ( $wp_settings_fields[ WpMenuCart_Settings::PAGE_ICON_STYLE ][ $section ] ?? array() as $field ) {
+				$args = $field['args'];
+
+				if ( '' === $field['title'] ) {
+					// No label row wanted, e.g. the Custom section's own toggle.
+					call_user_func( $field['callback'], $args );
+					continue;
+				}
+
+				$description       = $args['description'] ?? '';
+				$tooltip           = $args['tooltip'] ?? '';
+				$inline_toggle     = ! empty( $args['inline_toggle'] );
+				$custom_attributes = $args['custom_attributes'] ?? array();
+
+				// The row itself displays the description on the left. Strip it
+				// from the args passed to the field callback, otherwise fields
+				// like select_with_locked_options() print it a second time
+				// inside the control column on the right.
+				unset( $args['description'], $args['tooltip'], $args['custom_attributes'] );
+
+				$this->render_custom_field_row(
+					$field['title'],
+					$description,
+					function() use ( $field, $args ) {
+						call_user_func( $field['callback'], $args );
+					},
+					$inline_toggle,
+					$inline_toggle,
+					$tooltip,
+					$custom_attributes
+				);
+			}
+		}
+
+		/**
+		 * Render a Custom-section field row: label + description stacked on
+		 * the left, the control on the right. Matches the design's layout,
+		 * distinct from render_subpanel_field_row()'s single-line label shape
+		 * used by Cart Display Modes' sub-panels.
+		 *
+		 * @param  string   $label             The translated field label.
+		 * @param  string   $description       The translated description, shown under the label.
+		 * @param  callable $callback          Callable that renders the field control HTML.
+		 * @param  bool     $show_info_icon    Whether to render an info icon next to the label, tooltipped with $tooltip.
+		 * @param  bool     $inline_toggle     Whether the control renders inline with the label (e.g. a toggle switch) instead of in its own column.
+		 * @param  string   $tooltip           The translated tooltip text for the info icon. Ignored if $show_info_icon is false.
+		 * @param  array    $custom_attributes Extra data-* attributes for the row, e.g. conditional-visibility hooks. See normalize_custom_attributes().
+		 * @return void
+		 */
+		protected function render_custom_field_row( string $label, string $description, callable $callback, bool $show_info_icon = false, bool $inline_toggle = false, string $tooltip = '', array $custom_attributes = array() ): void {
+			printf(
+				'<div class="wpmenucart-custom-field-row" %s>',
+				$this->normalize_custom_attributes( $custom_attributes )
+			);
+
+			echo '<div class="wpmenucart-custom-field-row__info">';
+			if ( $inline_toggle ) {
+				$callback();
+			}
+			echo '<span class="wpmenucart-custom-field-row__label-row">';
+			printf( '<strong class="wpmenucart-custom-field-row__label">%s</strong>', esc_html( $label ) );
+			if ( $show_info_icon && $tooltip ) {
+				printf( '<span class="wpmenucart-custom-field-row__info-icon" title="%s" aria-hidden="true">', esc_attr( $tooltip ) );
+				$this->render_svg( 'info.svg' );
+				echo '</span>';
+			}
+			echo '</span>';
+			if ( $description ) {
+				printf( '<span class="wpmenucart-custom-field-row__description">%s</span>', esc_html( $description ) );
+			}
+			echo '</div>';
+
+			if ( ! $inline_toggle ) {
+				echo '<div class="wpmenucart-custom-field-row__control">';
+				$callback();
+				echo '</div>';
+			}
+
+			echo '</div>';
+		}
+
+		/**
 		 * Render a single cart mode selection card.
 		 *
 		 * @param  array $args {
@@ -318,20 +475,33 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 
 			$show_plain_tooltip = $disabled && empty( $pro ) && ! empty( $disabled_tooltip );
 
-			printf(
-				'<label class="%s" data-mode="%s"%s>',
-				esc_attr( implode( ' ', $card_classes ) ),
-				esc_attr( $mode ),
-				$show_plain_tooltip ? ' title="' . esc_attr( $disabled_tooltip ) . '"' : ''
-			);
+			$is_pro_locked = $disabled && ! empty( $pro );
 
-			printf(
-				'<input type="radio" name="%s" value="%s"%s%s />',
-				esc_attr( sprintf( '%s[%s]', WpMenuCart_Settings::OPTION_NAME, $option_key ) ),
-				esc_attr( $mode ),
-				checked( $current_value, $mode, false ),
-				$disabled ? ' disabled' : ''
-			);
+			if ( $is_pro_locked ) {
+				$card_classes[] = 'wpmenucart-mode-card--pro-locked';
+
+				printf(
+					'<a class="%s" data-mode="%s" href="%s" target="_blank" rel="noopener noreferrer">',
+					esc_attr( implode( ' ', $card_classes ) ),
+					esc_attr( $mode ),
+					esc_url( 'https://wpovernight.com/downloads/menu-cart-pro?utm_medium=plugin&utm_source=menucart&utm_campaign=cartmode&utm_content=settings-cross-' . $mode )
+				);
+			} else {
+				printf(
+					'<label class="%s" data-mode="%s"%s>',
+					esc_attr( implode( ' ', $card_classes ) ),
+					esc_attr( $mode ),
+					$show_plain_tooltip ? ' title="' . esc_attr( $disabled_tooltip ) . '"' : ''
+				);
+
+				printf(
+					'<input type="radio" name="%s" value="%s"%s%s />',
+					esc_attr( sprintf( '%s[%s]', WpMenuCart_Settings::OPTION_NAME, $option_key ) ),
+					esc_attr( $mode ),
+					checked( $current_value, $mode, false ),
+					$disabled ? ' disabled' : ''
+				);
+			}
 
 			echo '<div class="wpmenucart-mode-card__checkmark">';
 			$this->render_svg( 'checkmark.svg' );
@@ -342,9 +512,9 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 				$this->render_svg( 'conflict.svg' );
 				echo '</div>';
 			} elseif ( ! empty( $pro ) ) {
-				echo '<div class="wpmenucart-mode-card__pro-badge" title="' . esc_attr__( 'Requires Menu Cart Pro.', 'wp-menu-cart' ) . '">';
-				$this->render_svg( 'pro-badge.svg' );
-				echo '</div>';
+				echo '<span class="wpmenucart-mode-card__pro-badge" title="' . esc_attr__( 'Requires Menu Cart Pro.', 'wp-menu-cart' ) . '">';
+				echo __( 'Pro', 'wp-menu-cart' );
+				echo '</span>';
 			}
 
 			echo '<div class="wpmenucart-mode-card__icon" aria-hidden="true">';
@@ -354,13 +524,10 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 			echo '<div class="wpmenucart-mode-card__content">';
 			printf( '<strong class="wpmenucart-mode-card__name">%s</strong>', esc_html( $name ) );
 			printf( '<span class="wpmenucart-mode-card__description">%s</span>', esc_html( $description ) );
+
 			echo '</div>';
 
-			if ( $disabled && ! empty( $pro ) ) {
-				echo wp_kses( $this->pro_overlay( 'cartmode' . $mode ), $this->get_allowed_html() );
-			}
-
-			echo '</label>';
+			echo $is_pro_locked ? '</a>' : '</label>';
 		}
 
 		/**
@@ -398,68 +565,101 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 		}
 
 		/**
-		 * Render the Sidebar Slide-out Settings sub-panel.
+		 * Render a Cart Display Modes-style sub-panel.
 		 *
-		 * @param  string $context 'desktop' or 'mobile'.
+		 * @param  string   $context       'desktop', 'mobile', or another data-context value.
+		 * @param  string   $mode          The mode value this sub-panel belongs to, e.g. 'sidebar'.
+		 * @param  string   $title         The sub-panel's header title. Empty string skips the header entirely.
+		 * @param  callable $render_fields Callable that renders the field rows inside .wpmenucart-subpanel__fields.
+		 * @param  string   $option_key    The option array key holding the controlling value. Defaults to '{$context}_cart_mode'.
+		 * @param  string   $fields_class  Optional extra class on .wpmenucart-subpanel__fields, e.g. '--grid'.
 		 * @return void
 		 */
-		public function render_sidebar_subpanel( string $context ): void {
+		protected function render_mode_subpanel( string $context, string $mode, string $title, callable $render_fields, string $option_key = '', string $fields_class = '' ): void {
+			$option_key = $option_key ?: $context . '_cart_mode';
+
+			$subpanel_attributes = $this->normalize_custom_attributes( array(
+				'data-show_for_option_name'   => WpMenuCart_Settings::OPTION_NAME . '[' . $option_key . ']',
+				'data-show_for_option_values' => wp_json_encode( array( $mode ) ),
+			) );
+
 			printf(
-				'<div class="wpmenucart-subpanel" data-context="%s" data-mode="sidebar">',
-				esc_attr( $context )
+				'<div class="wpmenucart-subpanel" data-context="%s" data-mode="%s" %s>',
+				esc_attr( $context ),
+				esc_attr( $mode ),
+				$subpanel_attributes
 			);
 
-			$this->render_subpanel_header(
-				__( 'Sidebar Slide-out Settings', 'wp-menu-cart' ),
-				$context
-			);
+			if ( $title ) {
+				$badge_label = in_array( $context, array( 'desktop', 'mobile' ), true )
+					? ( 'desktop' === $context ? __( 'Desktop only', 'wp-menu-cart' ) : __( 'Mobile only', 'wp-menu-cart' ) )
+					: '';
 
-			echo '<div class="wpmenucart-subpanel__fields">';
+				$this->render_subpanel_header( $title, $context, $badge_label );
+			}
 
-			$this->range_slider( array(
-				'option_name' => WpMenuCart_Settings::OPTION_NAME,
-				'id'          => $context . '_sidebar_width',
-				'label'       => __( 'Sidebar width', 'wp-menu-cart' ),
-				'min'         => 320,
-				'max'         => 500,
-				'step'        => 10,
-				'unit'        => 'px',
-			) );
-
-			$this->range_slider( array(
-				'option_name' => WpMenuCart_Settings::OPTION_NAME,
-				'id'          => $context . '_overlay_opacity',
-				'label'       => __( 'Overlay opacity', 'wp-menu-cart' ),
-				'min'         => 10,
-				'max'         => 100,
-				'step'        => 5,
-				'unit'        => '%',
-			) );
-
+			printf( '<div class="wpmenucart-subpanel__fields%s">', $fields_class ? ' ' . esc_attr( $fields_class ) : '' );
+			$render_fields();
 			echo '</div>';
 
 			echo '</div>';
 		}
 
 		/**
-		 * Render the header row for a sub-panel.
+		 * Render the Sidebar Slide-out Settings sub-panel.
 		 *
-		 * @param  string $title   The translated sub-panel title.
 		 * @param  string $context 'desktop' or 'mobile'.
 		 * @return void
 		 */
-		protected function render_subpanel_header( string $title, string $context ): void {
-			$badge_label = 'desktop' === $context
-				? __( 'Desktop only', 'wp-menu-cart' )
-				: __( 'Mobile only', 'wp-menu-cart' );
+		public function render_sidebar_subpanel( string $context ): void {
+			$this->render_mode_subpanel(
+				$context,
+				'sidebar',
+				__( 'Sidebar Slide-out Settings', 'wp-menu-cart' ),
+				function() use ( $context ) {
+					$this->range_slider( array(
+						'option_name' => WpMenuCart_Settings::OPTION_NAME,
+						'id'          => $context . '_sidebar_width',
+						'label'       => __( 'Sidebar width', 'wp-menu-cart' ),
+						'min'         => 320,
+						'max'         => 500,
+						'step'        => 10,
+						'unit'        => 'px',
+					) );
 
+					$this->range_slider( array(
+						'option_name' => WpMenuCart_Settings::OPTION_NAME,
+						'id'          => $context . '_overlay_opacity',
+						'label'       => __( 'Overlay opacity', 'wp-menu-cart' ),
+						'min'         => 10,
+						'max'         => 100,
+						'step'        => 5,
+						'unit'        => '%',
+					) );
+				}
+			);
+		}
+
+		/**
+		 * Render the header row for a sub-panel.
+		 *
+		 * @param  string $title       The translated sub-panel title.
+		 * @param  string $context     Used only for the badge's modifier class, e.g. 'desktop'/'mobile'. Irrelevant when $badge_label is ''.
+		 * @param  string $badge_label Translated badge text, e.g. 'Desktop only'. Empty string omits the badge entirely.
+		 * @return void
+		 */
+		protected function render_subpanel_header( string $title, string $context, string $badge_label = '' ): void {
 			echo '<div class="wpmenucart-subpanel__header">';
 			printf( '<h4 class="wpmenucart-subpanel__title">%s</h4>', esc_html( $title ) );
-			printf(
-				'<span class="wpmenucart-subpanel__context-badge wpmenucart-subpanel__context-badge--%s">%s</span>',
-				esc_attr( $context ),
-				esc_html( $badge_label )
-			);
+
+			if ( $badge_label ) {
+				printf(
+					'<span class="wpmenucart-subpanel__context-badge wpmenucart-subpanel__context-badge--%s">%s</span>',
+					esc_attr( $context ),
+					esc_html( $badge_label )
+				);
+			}
+
 			echo '</div>';
 		}
 
@@ -518,6 +718,30 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 		}
 
 		/**
+		 * Get the ordered list of Icon Style template options.
+		 *
+		 * @return array[] Array of template definition arrays with keys: value, name, description.
+		 */
+		public function get_icon_style_options(): array {
+			return apply_filters( 'wpo_wpmenucart_icon_style_options', array(
+				array(
+					'value'       => 'cart_button',
+					'name'        => __( 'Cart button', 'wp-menu-cart' ),
+					'description' => __( 'Shape and total options', 'wp-menu-cart' ),
+					'disabled'    => true,
+					'pro'         => true,
+				),
+				array(
+					'value'       => 'icon_badge',
+					'name'        => __( 'Icon badge', 'wp-menu-cart' ),
+					'description' => __( 'Count overlays the icon', 'wp-menu-cart' ),
+					'disabled'    => true,
+					'pro'         => true,
+				),
+			) );
+		}
+
+		/**
 		 * Select element callback.
 		 *
 		 * @param  array $args Field arguments.
@@ -558,6 +782,127 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 		}
 
 		/**
+		 * Select element with per-option Pro locking.
+		 *
+		 * Renders a native select where some options are visible but locked:
+		 * they get the disabled attribute and a translated "(Pro)" suffix,
+		 * the same discoverable-but-locked treatment the template cards use.
+		 *
+		 * @param  array $args {
+		 *     @type string $option_name
+		 *     @type string $id
+		 *     @type array  $options        value => label
+		 *     @type array  $locked_options Optional. Option values that are Pro-locked.
+		 *     @type string $default
+		 *     @type string $description
+		 * }
+		 * @return void
+		 */
+		public function select_with_locked_options( array $args ): void {
+			extract( $this->normalize_settings_args( $args ) );
+
+			$locked_options = $locked_options ?? array();
+
+			printf( '<select id="%1$s" name="%2$s">', esc_attr( $id ), esc_attr( $setting_name ) );
+
+			foreach ( $options as $key => $label ) {
+				$is_locked = in_array( (string) $key, $locked_options, true );
+
+				if ( $is_locked ) {
+					/* translators: %s: option label */
+					$label = sprintf( __( '%s (Pro)', 'wp-menu-cart' ), $label );
+				}
+
+				printf(
+					'<option value="%s"%s%s>%s</option>',
+					esc_attr( $key ),
+					selected( $current, $key, false ),
+					$is_locked ? ' disabled' : '',
+					esc_html( $label )
+				);
+			}
+
+			echo '</select>';
+
+			if ( isset( $custom ) ) {
+				$panel_attributes = $this->normalize_custom_attributes( array(
+					'data-show_for_option_name'   => $setting_name,
+					'data-show_for_option_values' => wp_json_encode( array( 'custom' ) ),
+					'data-keep_current_value'     => 'true',
+				) );
+
+				printf( '<div class="%1$s_custom wpmenucart-select-custom-panel" %2$s>', esc_attr( $id ), $panel_attributes );
+
+				$custom_callback = apply_filters( 'wpo_wpmenucart_settings_callback', array( $this, $custom['type'] ), $custom['type'] );
+
+				if ( is_callable( $custom_callback ) ) {
+					call_user_func( $custom_callback, $custom['args'] );
+				}
+
+				echo '</div>';
+			}
+
+			if ( isset( $description ) ) {
+				printf( '<p class="description">%s</p>', wp_kses_post( $description ) );
+			}
+		}
+
+		/**
+		 * Legacy icon radio grid, served only to sites running a Pro version
+		 * older than 5.1.0, which can't render the new Icon Style templates.
+		 * Old Pro is confirmed active whenever this runs, so every icon
+		 * renders as selectable. The icon glyphs come from Pro's own icon
+		 * font (wpmenucart-icons-pro.css), loaded by Pro itself.
+		 *
+		 * @param  array $args Field arguments.
+		 * @return void
+		 */
+		public function icons_radio_element_callback( array $args ): void {
+			extract( $this->normalize_settings_args( $args ) );
+
+			$icons  = '';
+			$radios = '';
+
+			foreach ( $options as $key => $iconnumber ) {
+				$icons  .= sprintf( '<td style="padding-bottom:0;font-size:16pt;" align="center"><label for="%1$s[%2$s]"><i class="wpmenucart-icon-shopping-cart-%3$s"></i></label></td>', esc_attr( $id ), esc_attr( $key ), esc_attr( $iconnumber ) );
+				$radios .= sprintf( '<td style="padding-top:0" align="center"><input type="radio" class="radio" id="%1$s[%2$s]" name="%3$s" value="%2$s"%4$s /></td>', esc_attr( $id ), esc_attr( $key ), esc_attr( $setting_name ), checked( $current, $key, false ) );
+			}
+
+			$html  = '<table><tr>' . $icons . '</tr><tr>' . $radios . '</tr></table>';
+			$html .= '<p class="description"><i>' . __( '<strong>Please note:</strong> you need to open your website in a new tab/browser window after updating the cart icon for the change to be visible!', 'wp-menu-cart' ) . '</i></p>';
+
+			echo wp_kses( $html, $this->get_allowed_html() );
+		}
+
+		/**
+		 * Generic toggle switch control, used for the Custom section's own
+		 * on/off toggle and for boolean fields inside it (icon_display).
+		 *
+		 * @param  array $args
+		 * @return void
+		 */
+		public function toggle_switch_callback( array $args ): void {
+			extract( $this->normalize_settings_args( $args ) );
+
+			printf(
+				'<label class="wpmenucart-toggle-switch"><input type="checkbox" id="%1$s" name="%2$s" value="1"%3$s /><span class="wpmenucart-toggle-switch__track" aria-hidden="true"></span></label>',
+				esc_attr( $id ),
+				esc_attr( $setting_name ),
+				checked( 1, $current, false )
+			);
+		}
+
+		/**
+		 * The Custom section's own toggle switch control.
+		 *
+		 * @param  array $args
+		 * @return void
+		 */
+		public function custom_section_toggle_callback( array $args ): void {
+			$this->toggle_switch_callback( $args );
+		}
+
+		/**
 		 * Validate and sanitize settings input, including cart-mode and
 		 * sidebar-specific fields.
 		 *
@@ -587,18 +932,46 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 				}
 
 				$output = array_merge( $existing, $output );
+
+				if ( WpMenuCart_Settings::PAGE_ICON_STYLE === $page ) {
+					$output['icon_style_custom_enabled'] = isset( $input['icon_style_custom_enabled'] ) ? '1' : '0';
+				}
 			}
 
 			$is_main_settings = isset( $output['shop_plugin'] )
 				|| isset( $output['items_display'] )
 				|| isset( $output['desktop_cart_mode'] )
-				|| isset( $output['mobile_cart_mode'] );
+				|| isset( $output['mobile_cart_mode'] )
+				|| isset( $output['icon_style_template'] )
+				|| isset( $output['icon_style_custom_enabled'] );
 
 			if ( ! $is_main_settings ) {
 				return $output;
 			}
 
 			$allowed_modes = array_column( $this->get_cart_mode_options(), 'value' );
+
+			if ( isset( $output['icon_style_template'] ) ) {
+				$output['icon_style_template'] = $this->resolve_available_icon_style( $output['icon_style_template'] );
+			}
+
+			$allowed_cart_icons = WPO_Menu_Cart()->pro_older_than( '5.1.0' )
+				? array_map( 'strval', range( 0, 13 ) )
+				: apply_filters( 'wpo_wpmenucart_allowed_cart_icons', array( '0' ) );
+
+			if ( isset( $output['cart_icon'] ) && ! in_array( (string) $output['cart_icon'], $allowed_cart_icons, true ) ) {
+				$output['cart_icon'] = '0';
+			}
+
+			// The Custom placeholder option for items_display requires Pro. Pro
+			// versions before 5.1.0 never hook wpo_wpmenucart_items_display_custom_unlocked,
+			// since it's new to this redesign, so they're allowed through on the
+			// legacy-icon-style check instead, the same way as the cart icon list.
+			if ( isset( $output['items_display'] ) && 'custom' === $output['items_display']
+				&& ! WPO_Menu_Cart()->pro_older_than( '5.1.0' )
+				&& ! apply_filters( 'wpo_wpmenucart_items_display_custom_unlocked', false ) ) {
+				$output['items_display'] = '3';
+			}
 
 			if ( isset( $output['desktop_cart_mode'] ) ) {
 				$output['desktop_cart_mode'] = in_array( $output['desktop_cart_mode'], $allowed_modes, true )
@@ -655,119 +1028,6 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 		}
 
 		/**
-		 * Media upload button with optional Pro overlay.
-		 *
-		 * @param  array $args
-		 *
-		 * @return void
-		 */
-		public function media_upload_callback( array $args ): void {
-			$pro = $args['pro'] ?? false;
-
-			extract( $this->normalize_settings_args( $args ) );
-
-			$disabled = isset( $disabled ) ? ' disabled' : '';
-
-			$html = sprintf(
-				'<input type="button" id="%1$s" name="%2$s" class="btn button-primary" value="%3$s"%4$s />',
-				esc_attr( $id ),
-				esc_attr( $setting_name ),
-				esc_attr( $uploader_button_text ?? '' ),
-				esc_attr( $disabled )
-			);
-
-			if ( isset( $description ) ) {
-				$html .= sprintf( '<p class="description">%s</p>', wp_kses_post( $description ) );
-			}
-
-			if ( $disabled && $pro ) {
-				$html .= $this->pro_overlay( 'menucartflyout' );
-				$html  = '<div class="pro-setting-wrapper">' . $html . '</div>';
-			}
-
-			echo wp_kses( $html, $this->get_allowed_html() );
-		}
-
-		/**
-		 * Icon radio with locked icons 1-13 when Pro not active.
-		 *
-		 * @param  array $args
-		 *
-		 * @return void
-		 */
-		public function icons_radio_element_callback( array $args ): void {
-			extract( $this->normalize_settings_args( $args ) );
-
-			$icons  = '';
-			$radios = '';
-
-			foreach ( $options as $key => $iconnumber ) {
-				if ( '0' === (string) $key ) {
-					$icons  .= sprintf( '<td style="padding-bottom:0;font-size:16pt;" align="center"><label for="%1$s[%2$s]"><i class="wpmenucart-icon-shopping-cart-%3$s"></i></label></td>', esc_attr( $id ), esc_attr( $key ), esc_attr( $iconnumber ) );
-					$radios .= sprintf( '<td style="padding-top:0" align="center"><input type="radio" class="radio" id="%1$s[%2$s]" name="%3$s" value="%2$s"%4$s /></td>', esc_attr( $id ), esc_attr( $key ), esc_attr( $setting_name ), checked( $current, $key, false ) );
-				} else {
-					$icons .= sprintf( '<td style="padding-bottom:0;font-size:16pt;" align="center"><label for="%1$s[%2$s]"><img src="%3$scart-icon-%4$s.png" /></label></td>', esc_attr( $id ), esc_attr( $key ), esc_url( WPO_Menu_Cart()->plugin_url() . '/assets/images/' ), esc_attr( $iconnumber ) );
-					$radio  = sprintf( '<input type="radio" class="radio" id="%1$s[%2$s]" name="%3$s" value="%2$s" disabled />', esc_attr( $id ), esc_attr( $key ), esc_attr( $setting_name ) );
-					$radio .= '<div class="hidden-input-icon"></div>';
-					$radio  = '<div class="pro-setting-wrapper">' . $radio . '</div>';
-					$radios .= '<td style="padding-top:0" align="center">' . $radio . '</td>';
-				}
-			}
-
-			$profeature = '<span style="display:none;" class="pro-icon"><i>' . __( 'Additional icons are only available in', 'wp-menu-cart' ) . ' <a href="https://wpovernight.com/downloads/menu-cart-pro?utm_source=wordpress&utm_medium=menucartfree&utm_campaign=menucarticons">Menu Cart Pro</a></i></span>';
-			$html       = '<table><tr>' . $icons . '</tr><tr>' . $radios . '</tr></table>' . $profeature;
-
-			echo wp_kses( $html, $this->get_allowed_html() );
-		}
-
-		/**
-		 * Helper method: Renders a callback from the base class and wraps it in a Pro overlay.
-		 *
-		 * @param string $method   The method to call.
-		 * @param array  $args     The field arguments.
-		 * @param string $campaign The UTM campaign slug for the link.
-		 *
-		 * @return void
-		 */
-		protected function render_with_pro_overlay( string $method, array $args, string $campaign ): void {
-			$pro      = $args['pro'] ?? false;
-			$disabled = ! empty( $args['disabled'] );
-
-			// Capture the exact HTML output from the base WPO class
-			ob_start();
-			parent::$method( $args );
-			$html = ob_get_clean();
-
-			if ( $disabled && $pro ) {
-				// The base class doesn't naturally support 'disabled' for fields like select & text.
-				// We can dynamically inject it here if it's missing, without rewriting the HTML logic.
-				if ( false === strpos( $html, 'disabled' ) ) {
-					$html = preg_replace( '/<(input|select|textarea)([^>]+)>/i', '<$1 disabled="disabled"$2>', $html );
-				}
-
-				$html .= $this->pro_overlay( $campaign );
-				$html  = '<div class="pro-setting-wrapper">' . $html . '</div>';
-			}
-
-			echo wp_kses( $html, $this->get_allowed_html() );
-		}
-
-		/**
-		 * Generate the Pro overlay HTML.
-		 *
-		 * @param  string $campaign UTM campaign slug.
-		 *
-		 * @return string
-		 */
-		protected function pro_overlay( string $campaign ): string {
-			return sprintf(
-				' <span class="pro-feature"><i>%s <a href="%s">Menu Cart Pro</a></i></span><div class="hidden-input"></div>',
-				esc_html__( 'This feature only available in', 'wp-menu-cart' ),
-				esc_url( 'https://wpovernight.com/downloads/menu-cart-pro?utm_source=wordpress&utm_medium=menucartfree&utm_campaign=' . $campaign )
-			);
-		}
-
-		/**
 		 * Allowed HTML for wp_kses output.
 		 *
 		 * @return array
@@ -775,18 +1035,17 @@ if ( ! class_exists( 'WpMenuCart_Settings_Callbacks' ) ) :
 		protected function get_allowed_html(): array {
 			return array(
 				'input'  => array( 'type' => array(), 'id' => array(), 'name' => array(), 'value' => array(), 'size' => array(), 'disabled' => array(), 'checked' => array(), 'class' => array(), 'placeholder' => array() ),
-				'label'  => array( 'for' => array() ),
+				'label'  => array( 'for' => array(), 'class' => array() ),
 				'table'  => array( 'id' => array(), 'class' => array(), 'style' => array() ),
 				'tr'     => array( 'id' => array(), 'class' => array(), 'style' => array() ),
 				'td'     => array( 'id' => array(), 'class' => array(), 'style' => array(), 'colspan' => array(), 'rowspan' => array(), 'align' => array() ),
 				'a'      => array( 'href' => array(), 'title' => array(), 'id' => array(), 'class' => array(), 'style' => array(), 'target' => array(), 'rel' => array() ),
 				'select' => array( 'id' => array(), 'name' => array(), 'class' => array(), 'disabled' => array() ),
-				'option' => array( 'value' => array(), 'selected' => array() ),
-				'div'    => array( 'id' => array(), 'class' => array(), 'style' => array() ),
-				'span'   => array( 'id' => array(), 'class' => array(), 'style' => array() ),
+				'option' => array( 'value' => array(), 'selected' => array(), 'disabled' => array() ),
+				'div'    => array( 'id' => array(), 'class' => array(), 'style' => array(), 'data-show_for_option_name' => array(), 'data-show_for_option_values' => array(), 'data-keep_current_value' => array() ),
+				'span'   => array( 'id' => array(), 'class' => array(), 'style' => array(), 'role' => array(), 'tabindex' => array(), 'aria-disabled' => array(), 'aria-hidden' => array(), 'aria-label' => array() ),
 				'p'      => array( 'id' => array(), 'class' => array(), 'style' => array() ),
 				'i'      => array( 'class' => array() ),
-				'img'    => array( 'src' => array() ),
 				'b'      => array(), 'br' => array(), 'em' => array(), 'strong' => array(),
 			);
 		}
